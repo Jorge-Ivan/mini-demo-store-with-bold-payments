@@ -1,0 +1,71 @@
+<p-toast />
+<div class="grid">
+  <div class="col-12">
+    <p-menubar [model]="items">
+        <ng-template pTemplate="end">
+            <div class="flex align-items-center gap-2 mr-8 relative">
+              <span class="quantity absolute text-center text-white bg-pink-600 border-round">{{count}}</span>
+              <i class="pi pi-shopping-cart mr-8" style="font-size: 1rem" (click)="op.toggle($event)"></i>
+            </div>
+        </ng-template>
+    </p-menubar>
+  </div>
+  <div class="col-8 col-offset-2 mt-4">
+    <div class="grid" *ngIf="productsResp!==undefined">
+      <div class="col-3" *ngFor="let product of productsResp.products">
+        <p-card header="{{ product.title }}" subheader="{{ product.price*conversionRate | currency }} COP" styleClass="custom-card">
+          <ng-template pTemplate="header">
+            <div class="product-image" style="background-image: url('{{ product.images[0] }}');" title="{{ product.title }}"></div>
+          </ng-template>
+          <p class="m-0 product-description">{{ product.description }}</p>
+          <ng-template pTemplate="footer">
+              <div class="flex gap-3 mt-1">
+                  <p-button label="{{ selectedProducts.includes(product) ? 'Remove from Cart' : 'Add to Cart' }}" class="w-full" styleClass="w-full" (click)="toggleSelection(product)" />
+              </div>
+          </ng-template>
+      </p-card>
+      </div>
+    </div>
+  </div>
+  <div class="col-8 col-offset-2 mt-4" *ngIf="productsResp!==undefined">
+    <p-paginator 
+      (onPageChange)="onPageChange($event)" 
+      [first]="first"
+      [rows]="rows" 
+      [totalRecords]="productsResp.total" 
+      [rowsPerPageOptions]="[8, 20, 32]" />
+  </div>
+</div>
+<div id="button-bold"></div>
+<p-overlayPanel #op>
+  <div class="flex flex-column gap-3 w-25rem">
+      <div>
+        <section class="flex justify-content-between align-items-center">
+          <div>
+            <span class="font-medium text-900 block">Carrito de compras</span>
+            <p class="my-0 text-xs">Total: {{calculateTotalAmount() | currency }} COP</p>
+          </div>
+          <p-button (onClick)="generateBoldLink()" label="Comprar" [disabled]="count==0" icon="pi pi-dollar" iconPos="right" severity="success" styleClass="button-buy" />
+        </section>
+        <p-divider />
+          <ul class="list-none p-0 m-0 flex flex-column gap-3">
+              <li *ngFor="let product of selectedProducts" class="flex align-items-center gap-2">
+                  <img [src]="product.image" style="width: 32px" />
+                  <div>
+                      <span class="font-medium">{{ product.title }} <small>({{product.quantity}})</small></span>
+                      <div class="text-sm text-color-secondary">{{(product.quantity * product.price)*conversionRate | currency }} COP</div>
+                  </div>
+                  <div class="flex align-items-center text-color-secondary ml-auto text-sm">
+                    <div class="card flex justify-content-center">
+                      <div class="p-button-group">
+                        <p-button styleClass="button-item-actions" severity="secondary" icon="pi pi-minus" size="small" [outlined]="true"(click)="reduceQuantity(product)" />
+                        <p-button styleClass="button-item-actions" severity="danger" icon="pi pi-trash" size="small" [outlined]="true" (click)="removeProduct(product)" />
+                          <p-button styleClass="button-item-actions" severity="secondary" icon="pi pi-plus" size="small" [outlined]="true" (click)="addQuantity(product)" />
+                      </div>
+                    </div>
+                  </div>
+              </li>
+          </ul>
+      </div>
+  </div>
+</p-overlayPanel>
