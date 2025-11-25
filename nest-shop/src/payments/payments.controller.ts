@@ -1,7 +1,20 @@
-import { Controller, Post, Body, Headers, Get, Param } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Headers,
+  Get,
+  Param,
+  Req,
+  Res,
+  HttpStatus,
+  RawBodyRequest,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
+import { Request, Response } from 'express';
 import * as CryptoJS from 'crypto-js';
+import * as crypto from 'crypto';
 
 @Controller('payments')
 export class PaymentsController {
@@ -82,6 +95,78 @@ export class PaymentsController {
         error.response?.data || error.message,
       );
       throw error.response?.data || error;
+    }
+  }
+
+  @Post('webhook')
+  async handleWebhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Res() res: Response,
+    @Headers('x-bold-signature') receivedSignature: string,
+  ): Promise<void> {
+    try {
+      // Obtener el cuerpo crudo de la solicitud
+      let rawBody: string;
+
+      if (req.rawBody) {
+        // Si tenemos rawBody disponible (configurado en main.ts)
+        rawBody = req.rawBody.toString('utf-8');
+      } else {
+        // Fallback: usar el body parseado y convertirlo a string
+        rawBody = JSON.stringify(req.body);
+      }
+
+      console.log('req.body ', rawBody);
+
+      const secretKey = this.configService.get<string>('BOLD_SECRET_KEY') || '';
+
+      // Codificar el cuerpo en base64
+      const encodedBody = Buffer.from(rawBody).toString('base64');
+      console.log('encoded ', encodedBody);
+
+      // Crear el hash HMAC SHA256
+      const hashed = crypto
+        .createHmac('sha256', secretKey)
+        .update(encodedBody)
+        .digest('hex');
+
+      console.log(
+        'receivedSignature ',
+        Buffer.from(receivedSignature || '').length,
+      );
+      console.log('hashed ', Buffer.from(hashed).length);
+
+      // Verificar la firma de manera segura
+      const isValidRequest =
+        receivedSignature &&
+        crypto.timingSafeEqual(
+          Buffer.from(hashed),
+          Buffer.from(receivedSignature),
+        );
+
+      console.log('is valid', isValidRequest);
+
+      if (!isValidRequest) {
+        res.status(HttpStatus.UNAUTHORIZED).json({
+          statusCode: HttpStatus.UNAUTHORIZED,
+          message: 'Firma inválida',
+        });
+        return;
+      }
+      // Procesar el webhook (aquí solo se registra en consola)
+      console.log('Webhook procesado exitosamente:', req.body);
+
+      res.status(HttpStatus.OK).json({
+        statusCode: HttpStatus.OK,
+        message: 'ok',
+        data: 'resultPaymentTransactions',
+      });
+    } catch (error) {
+      console.error('Error procesando webhook:', error);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message || 'Error interno del servidor',
+      });
     }
   }
 }
