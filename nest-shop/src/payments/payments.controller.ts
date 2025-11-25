@@ -9,6 +9,8 @@ import {
   Res,
   HttpStatus,
   RawBodyRequest,
+  HttpException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
@@ -18,10 +20,26 @@ import * as crypto from 'crypto';
 
 @Controller('payments')
 export class PaymentsController {
+  private readonly logger = new Logger(PaymentsController.name);
+  private readonly boldSecretKey: string;
+  private readonly isDebugEnabled: boolean;
+
   constructor(
     private configService: ConfigService,
     private httpService: HttpService,
-  ) {}
+  ) {
+    // Validar que la clave secreta esté configurada al inicializar el controlador
+    this.boldSecretKey = this.configService.get<string>('BOLD_SECRET_KEY');
+    if (!this.boldSecretKey || this.boldSecretKey.trim() === '') {
+      throw new HttpException(
+        'BOLD_SECRET_KEY environment variable is required but not configured',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // Solo habilitar debug si se configura explícitamente
+    this.isDebugEnabled = process.env.DEBUG_WEBHOOK === 'true';
+  }
 
   @Post('generate-hash')
   generateHash(@Body() body: any): any {
@@ -116,13 +134,35 @@ export class PaymentsController {
         rawBody = JSON.stringify(req.body);
       }
 
-      console.log('req.body ', rawBody);
+      // Generar un ID único para esta request para tracking
+      const requestId = `webhook_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-      const secretKey = this.configService.get<string>('BOLD_SECRET_KEY') || '';
+      this.logger.debug(`Webhook received`, {
+        requestId,
+        hasRawBody: !!req.rawBody,
+        bodyLength: rawBody.length,
+      });
+
+      // Solo logear contenido sensible si DEBUG está habilitado explícitamente
+      if (this.isDebugEnabled) {
+        console.log('DEBUG - Raw body content:', rawBody);
+      }
+
+      // Usar la clave secreta ya validada en el constructor
+      const secretKey = this.boldSecretKey;
 
       // Codificar el cuerpo en base64
       const encodedBody = Buffer.from(rawBody).toString('base64');
-      console.log('encoded ', encodedBody);
+
+      this.logger.debug(`Body encoded for signature verification`, {
+        requestId,
+        encodedLength: encodedBody.length,
+      });
+
+      // Solo logear contenido encoded si DEBUG está habilitado explícitamente
+      if (this.isDebugEnabled) {
+        console.log('DEBUG - Encoded body:', encodedBody);
+      }
 
       // Crear el hash HMAC SHA256
       const hashed = crypto
@@ -130,11 +170,24 @@ export class PaymentsController {
         .update(encodedBody)
         .digest('hex');
 
-      console.log(
-        'receivedSignature ',
-        Buffer.from(receivedSignature || '').length,
-      );
-      console.log('hashed ', Buffer.from(hashed).length);
+      this.logger.debug(`Signature verification in progress`, {
+        requestId,
+        hasReceivedSignature: !!receivedSignature,
+        receivedSignatureLength: Buffer.from(receivedSignature || '').length,
+        computedHashLength: Buffer.from(hashed).length,
+      });
+
+      // Solo logear signatures si DEBUG está habilitado explícitamente
+      if (this.isDebugEnabled) {
+        console.log(
+          'DEBUG - Received signature length:',
+          Buffer.from(receivedSignature || '').length,
+        );
+        console.log(
+          'DEBUG - Computed hash length:',
+          Buffer.from(hashed).length,
+        );
+      }
 
       // Verificar la firma de manera segura
       const isValidRequest =
@@ -144,17 +197,30 @@ export class PaymentsController {
           Buffer.from(receivedSignature),
         );
 
-      console.log('is valid', isValidRequest);
+      this.logger.debug(`Signature verification completed`, {
+        requestId,
+        isValid: isValidRequest,
+      });
 
       if (!isValidRequest) {
+        this.logger.warn(`Invalid webhook signature`, {
+          requestId,
+          reason: receivedSignature
+            ? 'signature_mismatch'
+            : 'missing_signature',
+        });
         res.status(HttpStatus.UNAUTHORIZED).json({
           statusCode: HttpStatus.UNAUTHORIZED,
           message: 'Firma inválida',
         });
         return;
       }
-      // Procesar el webhook (aquí solo se registra en consola)
-      console.log('Webhook procesado exitosamente:', req.body);
+
+      // Procesar el webhook
+      this.logger.log(`Webhook processed successfully`, {
+        requestId,
+        dataReceived: !!req.body,
+      });
 
       res.status(HttpStatus.OK).json({
         statusCode: HttpStatus.OK,
@@ -162,7 +228,11 @@ export class PaymentsController {
         data: 'resultPaymentTransactions',
       });
     } catch (error) {
-      console.error('Error procesando webhook:', error);
+      this.logger.error(`Error processing webhook`, {
+        error: error.message,
+        stack: error.stack,
+      });
+
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         message: error.message || 'Error interno del servidor',
