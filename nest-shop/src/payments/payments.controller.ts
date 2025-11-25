@@ -129,7 +129,9 @@ export class PaymentsController {
       if (req.rawBody) {
         rawBody = req.rawBody.toString('utf-8');
       } else {
-        console.error('rawBody not available - ensure rawBody: true is set in main.ts');
+        console.error(
+          'rawBody not available - ensure rawBody: true is set in main.ts',
+        );
         res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
           message: 'Server configuration error',
@@ -154,23 +156,20 @@ export class PaymentsController {
       // Usar la clave secreta ya validada en el constructor
       const secretKey = this.boldSecretKey;
 
-      // Codificar el cuerpo en base64
-      const encodedBody = Buffer.from(rawBody).toString('base64');
-
-      this.logger.debug(`Body encoded for signature verification`, {
+      this.logger.debug(`Preparing signature verification`, {
         requestId,
-        encodedLength: encodedBody.length,
+        rawBodyLength: rawBody.length,
       });
 
-      // Solo logear contenido encoded si DEBUG está habilitado explícitamente
+      // Solo logear contenido raw si DEBUG está habilitado explícitamente
       if (this.isDebugEnabled) {
-        console.log('DEBUG - Encoded body:', encodedBody);
+        console.log('DEBUG - Raw body for HMAC:', rawBody);
       }
 
-      // Crear el hash HMAC SHA256
+      // Crear el hash HMAC SHA256 usando el raw body directamente
       const hashed = crypto
         .createHmac('sha256', secretKey)
-        .update(encodedBody)
+        .update(rawBody)
         .digest('hex');
 
       this.logger.debug(`Signature verification in progress`, {
