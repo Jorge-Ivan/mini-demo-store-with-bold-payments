@@ -109,11 +109,14 @@ export class PaymentsController {
       let rawBody: string;
 
       if (req.rawBody) {
-        // Si tenemos rawBody disponible (configurado en main.ts)
         rawBody = req.rawBody.toString('utf-8');
       } else {
-        // Fallback: usar el body parseado y convertirlo a string
-        rawBody = JSON.stringify(req.body);
+        console.error('rawBody not available - ensure rawBody: true is set in main.ts');
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'Server configuration error',
+        });
+        return;
       }
 
       console.log('req.body ', rawBody);
