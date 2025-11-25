@@ -140,12 +140,14 @@ export class PaymentsController {
       console.log('hashed ', Buffer.from(hashed).length);
 
       // Verificar la firma de manera segura
+      // Verify buffers have same length before timing-safe comparison
+      const hashedBuffer = Buffer.from(hashed);
+      const signatureBuffer = Buffer.from(receivedSignature || '');
+
       const isValidRequest =
         receivedSignature &&
-        crypto.timingSafeEqual(
-          Buffer.from(hashed),
-          Buffer.from(receivedSignature),
-        );
+        hashedBuffer.length === signatureBuffer.length &&
+        crypto.timingSafeEqual(hashedBuffer, signatureBuffer);
 
       console.log('is valid', isValidRequest);
 
