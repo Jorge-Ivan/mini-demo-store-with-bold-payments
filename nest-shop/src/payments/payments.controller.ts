@@ -127,11 +127,14 @@ export class PaymentsController {
       let rawBody: string;
 
       if (req.rawBody) {
-        // Si tenemos rawBody disponible (configurado en main.ts)
         rawBody = req.rawBody.toString('utf-8');
       } else {
-        // Fallback: usar el body parseado y convertirlo a string
-        rawBody = JSON.stringify(req.body);
+        console.error('rawBody not available - ensure rawBody: true is set in main.ts');
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'Server configuration error',
+        });
+        return;
       }
 
       // Generar un ID único para esta request para tracking
@@ -190,12 +193,14 @@ export class PaymentsController {
       }
 
       // Verificar la firma de manera segura
+      // Verify buffers have same length before timing-safe comparison
+      const hashedBuffer = Buffer.from(hashed);
+      const signatureBuffer = Buffer.from(receivedSignature || '');
+
       const isValidRequest =
         receivedSignature &&
-        crypto.timingSafeEqual(
-          Buffer.from(hashed),
-          Buffer.from(receivedSignature),
-        );
+        hashedBuffer.length === signatureBuffer.length &&
+        crypto.timingSafeEqual(hashedBuffer, signatureBuffer);
 
       this.logger.debug(`Signature verification completed`, {
         requestId,
